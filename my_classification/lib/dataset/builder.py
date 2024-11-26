@@ -75,6 +75,9 @@ def build_dataloader(args):
     else:
         mixup_transform = None
 
+    if args.debug:
+        train_dataset = torch.utils.data.Subset(train_dataset, list(range(1000)))
+
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, shuffle=True)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.workers, 

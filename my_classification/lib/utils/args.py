@@ -136,6 +136,8 @@ parser.add_argument('--local_rank', default=0, type=int,
                     help='local rank of current process in distributed running')
 parser.add_argument('--dist_port', default='12345', type=str,
                     help='port for distributed communication')
+parser.add_argument('--debug', action='store_true', default=False,
+                    help='run in debug mode')
 
 # KD
 parser.add_argument('--kd', type=str, default='',
