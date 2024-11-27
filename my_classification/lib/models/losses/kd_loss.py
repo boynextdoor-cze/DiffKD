@@ -93,6 +93,10 @@ class KDLoss():
             for tm, tc, sc, ks in zip(teacher_modules, teacher_channels, student_channels, kernel_sizes):
                 self.diff[tm] = DiffKD(sc, tc, kernel_size=ks, use_ae=(ks!=1) and use_ae, ae_channels=ae_channels)
                 self.kd_loss[tm] = nn.MSELoss() if ks != 1 else KLDivergence(tau=tau)
+                # logging.info('original Diffusion params: {:.3f} M'.format(sum(p.numel()
+                #     for p in self.diff[tm].model.parameters() if p.requires_grad) / 1e6))
+                # logging.info('DiT params: {:.3f} M'.format(
+                #     sum(p.numel() for p in self.diff[tm].dit.parameters() if p.requires_grad) / 1e6))
             self.diff.cuda()
             # add diff module to student for optimization
             self.student._diff = self.diff

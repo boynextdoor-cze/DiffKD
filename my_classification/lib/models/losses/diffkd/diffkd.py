@@ -36,14 +36,13 @@ class DiffKD(nn.Module):
         if kernel_size == 1:
             self.model = DiffusionModel(channels_in=teacher_channels, kernel_size=kernel_size)
         else:
-            self.model = DiT_models['DiT-S/2'](
-                in_channels=teacher_channels,
-                input_size=student_spatial_dim,
-                chunk_size=8,
-                learn_sigma=False,
-                tokenize_channel=tokenize_channel
-            )
-        # self.model = DiffusionModel(channels_in=teacher_channels, kernel_size=kernel_size)
+            self.model = DiT_models['DiT-XXXS/2'](
+                        in_channels=teacher_channels,
+                        input_size=student_spatial_dim,
+                        chunk_size=8,
+                        learn_sigma=False,
+                        tokenize_channel=tokenize_channel
+                        )
         self.scheduler = DDIMScheduler(num_train_timesteps=num_train_timesteps, clip_sample=False, beta_schedule="linear")
         self.noise_adapter = NoiseAdapter(teacher_channels, kernel_size)
         # pipeline for denoising student feature

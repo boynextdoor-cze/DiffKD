@@ -6,8 +6,8 @@ batch_size: 64
 color_jitter: 0.0
 decay_by_epoch: True
 decay_epochs: 30
-decay_rate: 0.1
-decay_milestones: [150, 180, 210]
+decay_rate: 0.9
+# decay_milestones: [150, 180, 210]
 drop: 0.0
 epochs: 240
 log_interval: 50

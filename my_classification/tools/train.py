@@ -127,8 +127,11 @@ def main():
     steps_per_epoch = len(train_loader)
     warmup_steps = args.warmup_epochs * steps_per_epoch
     decay_steps = args.decay_epochs * steps_per_epoch
-    decay_milestones = [int(x * steps_per_epoch)
-                        for x in args.decay_milestones]
+    try:
+        decay_milestones = [int(x * steps_per_epoch)
+                            for x in args.decay_milestones]
+    except AttributeError:
+        decay_milestones = None
     total_steps = args.epochs * steps_per_epoch
     scheduler = build_scheduler(args.sched,
                                 optimizer,
