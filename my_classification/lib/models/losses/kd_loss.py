@@ -46,7 +46,8 @@ class KDLoss():
         kd_method='kdt4',
         ori_loss_weight=1.0,
         kd_loss_weight=1.0,
-        kd_loss_kwargs={}
+        kd_loss_kwargs={},
+        tensorboard_writer=None
     ):
         self.student = student
         self.teacher = teacher
@@ -54,6 +55,7 @@ class KDLoss():
         self.ori_loss_weight = ori_loss_weight
         self.kd_method = kd_method
         self.kd_loss_weight = kd_loss_weight
+        self.tensorboard_writer = tensorboard_writer
 
         self._teacher_out = None
         self._student_out = None
@@ -156,13 +158,25 @@ class KDLoss():
                     kd_loss += diff_loss + ae_loss
                     if self._iter % 50 == 0:
                         logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f} Diff loss: {diff_loss.item():.4f} AE loss: {ae_loss.item():.4f}')
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/kd_loss', kd_loss_.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/diff_loss', diff_loss.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/ae_loss', ae_loss.item(), self._iter)
                 else:
                     kd_loss += diff_loss
                     if self._iter % 50 == 0:
                         logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f} Diff loss: {diff_loss.item():.4f}')
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/kd_loss', kd_loss_.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/diff_loss', diff_loss.item(), self._iter)
             else:
                 if self._iter % 50 == 0:
                     logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f}')
+                    self.tensorboard_writer.add_scalar(
+                        'Loss/kd_loss', kd_loss_.item(), self._iter)
             kd_loss += kd_loss_
 
         self._teacher_out = {}

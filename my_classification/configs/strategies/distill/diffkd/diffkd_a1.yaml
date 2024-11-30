@@ -2,11 +2,12 @@ dataset: cifar100
 image_mean: [0.5071, 0.4867, 0.4408]
 image_std: [0.2675, 0.2565, 0.2761]
 aa: null
-batch_size: 64
+batch_size: 16
 color_jitter: 0.0
 cutout_length: 0
 decay_by_epoch: True
 decay_epochs: 30
+decay_milestones: [150, 180, 210]
 decay_rate: 0.1
 drop: 0.0
 epochs: 240
@@ -22,7 +23,7 @@ opt_betas: null
 opt_eps: 1.0e-08
 remode: const
 reprob: 0.0
-sched: step
+sched: multistep
 seed: 42
 warmup_epochs: 0
 warmup_lr: 0.05
@@ -36,6 +37,7 @@ kd_loss_weight: 1.
 kd: diffkd
 teacher_model: cifar_wrn_40_2
 teacher_pretrained: True
+teacher_ckpt: cifar_ckpts/wrn_40_2_vanilla/ckpt_epoch_240.pth
 kd_loss_kwargs:
   use_ae: True
   ae_channels: null
