@@ -10,7 +10,6 @@ def build_scheduler(sched_type, optimizer, warmup_steps, warmup_lr, step_size, d
         decay_by_epoch = False
     elif sched_type == 'multistep':
         scheduler = MultiStepLR(optimizer, gamma=decay_rate, milestones=decay_milestones)
-        
     elif sched_type == 'cosine':
         scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=min_lr)
     elif sched_type == 'linear':
