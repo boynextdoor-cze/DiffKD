@@ -18,6 +18,12 @@ KD_MODULES = {
     'cifar_wrn_40_2': dict(modules=['relu', 'fc'], channels=[128, 100]),
     'cifar_resnet56': dict(modules=['layer3', 'fc'], channels=[64, 100]),
     'cifar_resnet20': dict(modules=['layer3', 'fc'], channels=[64, 100]),
+    'cifar_ResNet50': dict(modules=['layer4', 'linear'], channels=[2048, 100]), # N*2048*4*4
+    'cifar_resnet8x4': dict(modules=['layer3', 'fc'], channels=[256, 100]), # N*256*8*8
+    'cifar_resnet32x4': dict(modules=['layer3', 'fc'], channels=[256, 100]), # N*256*8*8
+    'cifar_MobileNetV2': dict(modules=['conv2', 'classifier'], channels=[1280, 100]), # N*1280*2*2
+    'cifar_ShuffleV1': dict(modules=['layer3', 'linear'], channels=[960, 100]), # N*960*4*4
+    'cifar_ShuffleV2': dict(modules=['relu', 'linear'], channels=[1024, 100]), # N*1024*4*4
     'tv_resnet50': dict(modules=['layer4', 'fc'], channels=[2048, 1000]),
     'tv_resnet34': dict(modules=['layer4', 'fc'], channels=[512, 1000]),
     'tv_resnet18': dict(modules=['layer4', 'fc'], channels=[512, 1000]),
@@ -88,15 +94,27 @@ class KDLoss():
             teacher_modules = KD_MODULES[teacher_name]['modules']
             teacher_channels = KD_MODULES[teacher_name]['channels']
 
+            # register forward hook
+            # dicts that store distillation outputs of student and teacher
+            self._teacher_out = {}
+            self._student_out = {}
+
+            for student_module, teacher_module in zip(student_modules, teacher_modules):
+                self._register_forward_hook(student, student_module, teacher=False)
+                self._register_forward_hook(teacher, teacher_module, teacher=True)
+            self.student_modules = student_modules
+            self.teacher_modules = teacher_modules
+
+            with torch.no_grad():
+                t_logits = teacher(torch.randn(100, 3, 32, 32).cuda())
+                s_logits = student(torch.randn(100, 3, 32, 32).cuda())
+                import ipdb; ipdb.set_trace()
+
             self.diff = nn.ModuleDict()
             self.kd_loss = nn.ModuleDict()
             for tm, tc, sc, ks in zip(teacher_modules, teacher_channels, student_channels, kernel_sizes):
                 self.diff[tm] = DiffKD(sc, tc, kernel_size=ks, use_ae=(ks!=1) and use_ae, ae_channels=ae_channels)
                 self.kd_loss[tm] = nn.MSELoss() if ks != 1 else KLDivergence(tau=tau)
-                # logging.info('original Diffusion params: {:.3f} M'.format(sum(p.numel()
-                #     for p in self.diff[tm].model.parameters() if p.requires_grad) / 1e6))
-                # logging.info('DiT params: {:.3f} M'.format(
-                #     sum(p.numel() for p in self.diff[tm].dit.parameters() if p.requires_grad) / 1e6))
             self.diff.cuda()
             # add diff module to student for optimization
             self.student._diff = self.diff
@@ -114,16 +132,16 @@ class KDLoss():
         else:
             raise RuntimeError(f'KD method {kd_method} not found.')
 
-        # register forward hook
-        # dicts that store distillation outputs of student and teacher
-        self._teacher_out = {}
-        self._student_out = {}
+        # # register forward hook
+        # # dicts that store distillation outputs of student and teacher
+        # self._teacher_out = {}
+        # self._student_out = {}
 
-        for student_module, teacher_module in zip(student_modules, teacher_modules):
-            self._register_forward_hook(student, student_module, teacher=False)
-            self._register_forward_hook(teacher, teacher_module, teacher=True)
-        self.student_modules = student_modules
-        self.teacher_modules = teacher_modules
+        # for student_module, teacher_module in zip(student_modules, teacher_modules):
+        #     self._register_forward_hook(student, student_module, teacher=False)
+        #     self._register_forward_hook(teacher, teacher_module, teacher=True)
+        # self.student_modules = student_modules
+        # self.teacher_modules = teacher_modules
 
         teacher.eval()
         self._iter = 0
@@ -142,7 +160,7 @@ class KDLoss():
 
             # transform student feature
             if self.kd_method == 'diffkd':
-                if tm == 'layer3':
+                if tm in ['layer3', 'layer4']:
                     self._student_out[sm], self._teacher_out[tm], diff_loss, ae_loss = \
                         self.diff[tm](self._reshape_BCHW(
                             self._student_out[sm][0]), self._reshape_BCHW(self._teacher_out[tm][0]))

@@ -116,6 +116,7 @@ class ShuffleNetV2(nn.Module):
         self.conv2 = nn.Conv2d(out_channels[2], out_channels[3],
                                kernel_size=1, stride=1, padding=0, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels[3])
+        self.relu = nn.ReLU(inplace=True)
         self.linear = nn.Linear(out_channels[3], num_classes)
 
     def _make_layer(self, out_channels, num_blocks):
@@ -147,7 +148,7 @@ class ShuffleNetV2(nn.Module):
         f2 = out
         out, f3_pre = self.layer3(out)
         f3 = out
-        out = F.relu(self.bn2(self.conv2(out)))
+        out = self.relu(self.bn2(self.conv2(out)))
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         f4 = out
