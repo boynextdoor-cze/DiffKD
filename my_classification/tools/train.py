@@ -34,6 +34,7 @@ logger.setLevel(logging.INFO)
 def main():
     args, args_text = parse_args()
     args.exp_dir = f'experiments/{args.experiment}/{datetime.now().strftime("%Y%m%d-%H%M%S")}'
+    # args.exp_dir = f'experiments/{args.experiment}/20241128-105156'
 
     '''distributed'''
     init_dist(args)

@@ -2,12 +2,12 @@ dataset: cifar100
 image_mean: [0.5071, 0.4867, 0.4408]
 image_std: [0.2675, 0.2565, 0.2761]
 aa: null
-batch_size: 64
+batch_size: 16
 color_jitter: 0.0
 decay_by_epoch: True
 decay_epochs: 30
-decay_rate: 0.9
-# decay_milestones: [150, 180, 210]
+decay_rate: 0.1
+decay_milestones: [150, 180, 210]
 drop: 0.0
 epochs: 240
 log_interval: 50
@@ -32,8 +32,9 @@ workers: 8
 ori_loss_weight:  1.
 kd_loss_weight: 1.
 kd: diffkd
-teacher_model: cifar_wrn_40_2
+teacher_model: cifar_resnet56
 teacher_pretrained: True
+teacher_ckpt: cifar_ckpts/resnet56_vanilla/ckpt_epoch_240.pth
 kd_loss_kwargs:
   use_ae: True
   ae_channels: null
