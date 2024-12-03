@@ -1,13 +1,15 @@
 from collections import OrderedDict
 from torch.optim.lr_scheduler import _LRScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, LambdaLR
+from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR, LambdaLR, MultiStepLR
 
 
-def build_scheduler(sched_type, optimizer, warmup_steps, warmup_lr, step_size, decay_rate, total_steps=-1, multiplier=1, steps_per_epoch=1, decay_by_epoch=True, min_lr=1e-5):
+def build_scheduler(sched_type, optimizer, warmup_steps, warmup_lr, step_size, decay_rate, total_steps=-1, multiplier=1, steps_per_epoch=1, decay_by_epoch=True, min_lr=1e-5, decay_milestones=None):
     if sched_type == 'step':
         scheduler = StepLR(optimizer, step_size, gamma=decay_rate)
         decay_by_epoch = False
+    elif sched_type == 'multistep':
+        scheduler = MultiStepLR(optimizer, milestones=decay_milestones, gamma=decay_rate)
     elif sched_type == 'cosine':
         scheduler = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps, eta_min=min_lr)
     elif sched_type == 'linear':

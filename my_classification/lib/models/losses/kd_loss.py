@@ -1,7 +1,10 @@
 import math
 import torch
 import torch.nn as nn
+import json
 from functools import partial
+import torch.nn.functional as F
+import numpy as np
 
 from .kl_div import KLDivergence
 from .dist_kd import DIST
@@ -69,7 +72,8 @@ class KDLoss():
         ori_loss_weight=1.0,
         nd_loss_factor=1.0,
         kd_loss_weight=1.0,
-        kd_loss_kwargs={}
+        kd_loss_kwargs={},
+        tensorboard_writer=None
     ):
         self.student = student
         self.teacher = teacher
@@ -78,6 +82,7 @@ class KDLoss():
         self.kd_method = kd_method
         self.kd_loss_weight = kd_loss_weight
         self.nd_loss_factor = nd_loss_factor
+        self.tensorboard_writer = tensorboard_writer
 
         self._teacher_out = None
         self._student_out = None
@@ -161,19 +166,58 @@ class KDLoss():
         nd_loss = 0
         # print(f"[!!!!!!!!1]{self._student_out['layer4'].shape}") [32,512,1,1]
         # print(f"[!!!!!!!!2]{self._student_out['fc'].shape}") [32,1000]
+        # print(f"[!!!!!!!!1]{self._student_out['layer3'][0].shape}")
+        # print(f"[!!!!!!!!2]{self._student_out['fc'][0].shape}") 
+        # print(f"[!!!!!!!!3]{self._teacher_out['layer3'][0].shape}")
+        # print(f"[!!!!!!!!4]{self._teacher_out['fc'][0].shape}") 
 
         for tm, sm in zip(self.teacher_modules, self.student_modules):
             # compute nd loss (https://github.com/WangYZ1608/Knowledge-Distillation-via-ND/blob/main/CIFAR/train_cifar_kd.py)
             if tm == 'avgpool':
+                with open("/home/zcong/code/DiffKD/my_classification/ckpt/cifar10_embedding_fea/resnet34.json", 'r') as f:
+                    T_EMB = json.load(f)
+                f.close()
                 nd_loss = self.nd_loss(s_emb=self._student_out[sm], t_emb= self._teacher_out[tm], T_EMB=T_EMB, labels=targets)
                 continue
 
+            # nd_loss for resnet56 --> resnet20
+            if tm == 'layer3':
+                with open("/home/zcong/code/DiffKD/my_classification/ckpt/cifar100_embedding_fea/resnet56.json", 'r') as f:
+                    T_EMB = json.load(f)
+                f.close()
+                avg_pool = nn.AvgPool2d(8)
+                s_emb = avg_pool(self._student_out[sm][0])
+                s_emb=s_emb.view(s_emb.size(0), -1)
+                t_emb = avg_pool(self._teacher_out[sm][0])
+                t_emb=t_emb.view(t_emb.size(0), -1)
+                
+                nd_loss = self.nd_loss(s_emb=s_emb, t_emb= t_emb, T_EMB=T_EMB, labels=targets)
+
             # transform student feature
             if self.kd_method == 'diffkd':
-                self._student_out[sm], self._teacher_out[tm], diff_loss, ae_loss = \
-                    self.diff[tm](self._reshape_BCHW(self._student_out[sm]), self._reshape_BCHW(self._teacher_out[tm]))
+                if tm in ['layer3', 'layer4']:
+                    self._student_out[sm], self._teacher_out[tm], diff_loss, ae_loss = \
+                        self.diff[tm](self._reshape_BCHW(
+                            self._student_out[sm][0]), self._reshape_BCHW(self._teacher_out[tm][0]))
+                else:
+                    self._student_out[sm], self._teacher_out[tm], diff_loss, ae_loss = \
+                        self.diff[tm](self._reshape_BCHW(self._student_out[sm]), self._reshape_BCHW(self._teacher_out[tm]))
+            
             if hasattr(self, 'align'):
                 self._student_out[sm] = self.align(self._student_out[sm])
+            
+            # nd_loss for wrn40-2 --> wrn40-1
+            if tm == 'relu':
+                with open("/home/zcong/code/DiffKD/my_classification/ckpt/cifar100_embedding_fea/wrn_40_2.json", 'r') as f:
+                    T_EMB = json.load(f)
+                f.close()
+                s_emb = F.avg_pool2d(self._student_out[sm], 8)
+                s_emb=s_emb.view(-1, 64)
+                t_emb = F.avg_pool2d(self._teacher_out[sm], 8)
+                t_emb=t_emb.view(-1, 64)
+                
+                nd_loss = self.nd_loss(s_emb=s_emb, t_emb= t_emb, T_EMB=T_EMB, labels=targets)
+
 
             # compute kd loss
             if isinstance(self.kd_loss, nn.ModuleDict):
@@ -190,13 +234,25 @@ class KDLoss():
                     kd_loss += diff_loss + ae_loss
                     if self._iter % 50 == 0:
                         logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f} Diff loss: {diff_loss.item():.4f} AE loss: {ae_loss.item():.4f}')
+                        self.tensorboard_writer.add_scalar(
+                                'Loss/kd_loss', kd_loss_.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/diff_loss', diff_loss.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/ae_loss', ae_loss.item(), self._iter)
                 else:
                     kd_loss += diff_loss
                     if self._iter % 50 == 0:
                         logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f} Diff loss: {diff_loss.item():.4f}')
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/kd_loss', kd_loss_.item(), self._iter)
+                        self.tensorboard_writer.add_scalar(
+                            'Loss/diff_loss', diff_loss.item(), self._iter)
             else:
                 if self._iter % 50 == 0:
                     logger.info(f'[{tm}-{sm}] KD ({self.kd_method}) loss: {kd_loss_.item():.4f}')
+                    self.tensorboard_writer.add_scalar(
+                        'Loss/kd_loss', kd_loss_.item(), self._iter)
             kd_loss += kd_loss_
 
         kd_loss += nd_loss

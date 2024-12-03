@@ -6,6 +6,7 @@ import time
 import random
 import numpy as np
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.tensorboard import SummaryWriter 
 
 from lib.models.builder import build_model
 from lib.models.losses import CrossEntropyLabelSmooth, \
@@ -82,6 +83,7 @@ def main():
             f'FLOPs: {get_flops(model, input_shape=args.input_shape) / 1e9:.3f} G')
 
     model.cuda()
+    writer = SummaryWriter(log_dir=args.exp_dir)
     
 
     # knowledge distillation
@@ -98,7 +100,7 @@ def main():
         # build kd loss
         from lib.models.losses.kd_loss import KDLoss
         loss_fn = KDLoss(model, teacher_model, args.model, args.teacher_model, loss_fn, 
-                         args.kd, args.ori_loss_weight, args.nd_loss_factor, args.kd_loss_weight, args.kd_loss_kwargs)
+                         args.kd, args.ori_loss_weight, args.nd_loss_factor, args.kd_loss_weight, args.kd_loss_kwargs, writer)
 
     model = DDP(model,
                 device_ids=[args.local_rank],
@@ -126,6 +128,8 @@ def main():
     steps_per_epoch = len(train_loader)
     warmup_steps = args.warmup_epochs * steps_per_epoch
     decay_steps = args.decay_epochs * steps_per_epoch
+    decay_milestones = [int(x * steps_per_epoch)
+                        for x in args.decay_milestones]
     total_steps = args.epochs * steps_per_epoch
     scheduler = build_scheduler(args.sched,
                                 optimizer,
@@ -136,7 +140,8 @@ def main():
                                 total_steps,
                                 steps_per_epoch=steps_per_epoch,
                                 decay_by_epoch=args.decay_by_epoch,
-                                min_lr=args.min_lr)
+                                min_lr=args.min_lr,
+                                decay_milestones=decay_milestones)
 
     '''dyrep'''
     if args.dyrep:
@@ -204,10 +209,16 @@ def main():
         # train
         metrics = train_epoch(args, epoch, model, model_ema, train_loader,
                               optimizer, loss_fn, scheduler, auxiliary_buffer,
-                              dyrep, loss_scaler)
+                              dyrep, loss_scaler, writer)
 
         # validate
         test_metrics = validate(args, epoch, model, val_loader, val_loss_fn)
+        writer.add_scalar(
+            f'test/loss', test_metrics['test_loss'], epoch)
+        writer.add_scalar(
+            f'test/top1', test_metrics['top1'], epoch)
+        writer.add_scalar(
+            f'test/top5', test_metrics['top5'], epoch)
         if model_ema is not None:
             test_metrics = validate(args,
                                     epoch,
@@ -215,6 +226,12 @@ def main():
                                     val_loader,
                                     val_loss_fn,
                                     log_suffix='(EMA)')
+            writer.add_scalar(
+                f'test/loss (EMA)', test_metrics['test_loss'], epoch)
+            writer.add_scalar(
+                f'test/top1 (EMA)', test_metrics['top1'], epoch)
+            writer.add_scalar(
+                f'test/top5 (EMA)', test_metrics['top5'], epoch)
 
         # dyrep
         if dyrep is not None:
@@ -242,6 +259,8 @@ def main():
             '        {} : {:.3f}%'.format(ckpt, score) for ckpt, score in ckpts
         ]))
 
+    writer.close()
+
 
 def train_epoch(args,
                 epoch,
@@ -253,7 +272,8 @@ def train_epoch(args,
                 scheduler,
                 auxiliary_buffer=None,
                 dyrep=None,
-                loss_scaler=None):
+                loss_scaler=None,
+                tensorboard_writer=None):
     loss_m = AverageMeter(dist=True)
     data_time_m = AverageMeter(dist=True)
     batch_time_m = AverageMeter(dist=True)
@@ -322,6 +342,10 @@ def train_epoch(args,
                             lr=optimizer.param_groups[0]['lr'],
                             batch_time=batch_time_m,
                             data_time=data_time_m))
+            tensorboard_writer.add_scalar(
+                'train/loss', loss_m.val, epoch * len(loader) + batch_idx)
+            tensorboard_writer.add_scalar(
+                'train/lr', optimizer.param_groups[0]['lr'], epoch * len(loader) + batch_idx)
         scheduler.step(epoch * len(loader) + batch_idx + 1)
         start_time = time.time()
 
