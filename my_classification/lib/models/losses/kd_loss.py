@@ -94,22 +94,6 @@ class KDLoss():
             teacher_modules = KD_MODULES[teacher_name]['modules']
             teacher_channels = KD_MODULES[teacher_name]['channels']
 
-            # register forward hook
-            # dicts that store distillation outputs of student and teacher
-            self._teacher_out = {}
-            self._student_out = {}
-
-            for student_module, teacher_module in zip(student_modules, teacher_modules):
-                self._register_forward_hook(student, student_module, teacher=False)
-                self._register_forward_hook(teacher, teacher_module, teacher=True)
-            self.student_modules = student_modules
-            self.teacher_modules = teacher_modules
-
-            with torch.no_grad():
-                t_logits = teacher(torch.randn(100, 3, 32, 32).cuda())
-                s_logits = student(torch.randn(100, 3, 32, 32).cuda())
-                import ipdb; ipdb.set_trace()
-
             self.diff = nn.ModuleDict()
             self.kd_loss = nn.ModuleDict()
             for tm, tc, sc, ks in zip(teacher_modules, teacher_channels, student_channels, kernel_sizes):
@@ -134,14 +118,14 @@ class KDLoss():
 
         # # register forward hook
         # # dicts that store distillation outputs of student and teacher
-        # self._teacher_out = {}
-        # self._student_out = {}
+        self._teacher_out = {}
+        self._student_out = {}
 
-        # for student_module, teacher_module in zip(student_modules, teacher_modules):
-        #     self._register_forward_hook(student, student_module, teacher=False)
-        #     self._register_forward_hook(teacher, teacher_module, teacher=True)
-        # self.student_modules = student_modules
-        # self.teacher_modules = teacher_modules
+        for student_module, teacher_module in zip(student_modules, teacher_modules):
+            self._register_forward_hook(student, student_module, teacher=False)
+            self._register_forward_hook(teacher, teacher_module, teacher=True)
+        self.student_modules = student_modules
+        self.teacher_modules = teacher_modules
 
         teacher.eval()
         self._iter = 0

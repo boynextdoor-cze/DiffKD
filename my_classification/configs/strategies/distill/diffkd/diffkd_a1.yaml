@@ -35,6 +35,9 @@ kd: diffkd
 teacher_model: cifar_resnet56
 teacher_pretrained: True
 teacher_ckpt: cifar_ckpts/resnet56_vanilla/ckpt_epoch_240.pth
+# student_pretrained: True
+# student_ckpt: experiments/resnet50_shufflev1/reproduce/best.pth.tar
+# resume: experiments/resnet50_shufflev1/reproduce/best.pth.tar
 kd_loss_kwargs:
   use_ae: True
   ae_channels: null
