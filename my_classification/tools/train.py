@@ -100,7 +100,7 @@ def main():
         # build kd loss
         from lib.models.losses.kd_loss import KDLoss
         loss_fn = KDLoss(model, teacher_model, args.model, args.teacher_model, loss_fn, 
-                         args.kd, args.ori_loss_weight, args.kd_loss_weight, args.kd_loss_kwargs, writer)
+                         args.kd, args.ori_loss_weight, args.nd_loss_factor, args.kd_loss_weight, args.kd_loss_kwargs, writer)
 
     model = DDP(model,
                 device_ids=[args.local_rank],

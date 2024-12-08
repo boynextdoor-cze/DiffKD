@@ -31,6 +31,7 @@ workers: 8
 # kd
 ori_loss_weight:  1.
 kd_loss_weight: 1.
+nd_loss_factor: 1.
 kd: diffkd
 teacher_model: cifar_resnet56
 teacher_pretrained: True

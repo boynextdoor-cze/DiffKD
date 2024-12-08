@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 from functools import partial
+import json
 
 from .kl_div import KLDivergence
 from .dist_kd import DIST
@@ -37,6 +38,31 @@ KD_MODULES = {
 }
 
 
+class DirectNormLoss(nn.Module):
+
+    def __init__(self, num_class=100, nd_loss_factor=1.0):
+        super(DirectNormLoss, self).__init__()
+        self.num_class = num_class
+        self.nd_loss_factor = nd_loss_factor
+
+    def project_center(self, s_emb, t_emb, T_EMB, labels):
+        assert s_emb.size() == t_emb.size()
+        assert s_emb.shape[0] == len(labels)
+        loss = 0.0
+        for s, t, i in zip(s_emb, t_emb, labels):
+            i = i.item()
+            center = torch.tensor(T_EMB[str(i)]).cuda()
+            e_c = center / center.norm(p=2)
+            max_norm = max(s.norm(p=2), t.norm(p=2))
+            loss += 1 - torch.dot(s, e_c) / max_norm
+        return loss
+
+    def forward(self, s_emb, t_emb, T_EMB, labels):
+        nd_loss = self.project_center(
+            s_emb=s_emb, t_emb=t_emb, T_EMB=T_EMB, labels=labels) * self.nd_loss_factor
+
+        return nd_loss / len(labels)
+
 
 class KDLoss():
     '''
@@ -52,6 +78,7 @@ class KDLoss():
         ori_loss,
         kd_method='kdt4',
         ori_loss_weight=1.0,
+        nd_loss_factor=1.0,
         kd_loss_weight=1.0,
         kd_loss_kwargs={},
         tensorboard_writer=None
@@ -62,6 +89,7 @@ class KDLoss():
         self.ori_loss_weight = ori_loss_weight
         self.kd_method = kd_method
         self.kd_loss_weight = kd_loss_weight
+        self.nd_loss_factor = nd_loss_factor
         self.tensorboard_writer = tensorboard_writer
 
         self._teacher_out = None
@@ -96,6 +124,8 @@ class KDLoss():
 
             self.diff = nn.ModuleDict()
             self.kd_loss = nn.ModuleDict()
+            self.nd_loss = DirectNormLoss(
+                num_class=100, nd_loss_factor=nd_loss_factor).cuda()
             for tm, tc, sc, ks in zip(teacher_modules, teacher_channels, student_channels, kernel_sizes):
                 self.diff[tm] = DiffKD(sc, tc, kernel_size=ks, use_ae=(ks!=1) and use_ae, ae_channels=ae_channels)
                 self.kd_loss[tm] = nn.MSELoss() if ks != 1 else KLDivergence(tau=tau)
@@ -139,8 +169,23 @@ class KDLoss():
         ori_loss = self.ori_loss(logits, targets)
 
         kd_loss = 0
+        nd_loss = 0
 
         for tm, sm in zip(self.teacher_modules, self.student_modules):
+
+            # nd_loss for resnet56 --> resnet20
+            if tm == 'layer3':
+                with open("teacher_embedding/cifar100_embedding_fea/resnet56.json", 'r') as f:
+                    T_EMB = json.load(f)
+                f.close()
+                avg_pool = nn.AvgPool2d(8)
+                s_emb = avg_pool(self._student_out[sm][0])
+                s_emb = s_emb.view(s_emb.size(0), -1)
+                t_emb = avg_pool(self._teacher_out[sm][0])
+                t_emb = t_emb.view(t_emb.size(0), -1)
+
+                nd_loss = self.nd_loss(
+                    s_emb=s_emb, t_emb=t_emb, T_EMB=T_EMB, labels=targets)
 
             # transform student feature
             if self.kd_method == 'diffkd':
@@ -187,6 +232,10 @@ class KDLoss():
                         'Loss/kd_loss', kd_loss_.item(), self._iter)
             kd_loss += kd_loss_
 
+        kd_loss += nd_loss
+        self.tensorboard_writer.add_scalar(
+            'Loss/nd_loss', nd_loss.item(), self._iter)
+        
         self._teacher_out = {}
         self._student_out = {}
 
